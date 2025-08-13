@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Peralatan Mesin Per Kecamatan</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gray-100 flex">
+
+<!-- Sidebar -->
+<nav class="w-64 bg-white shadow-md border-r border-gray-200 flex flex-col h-screen fixed left-0 top-0">
+  <div class="sticky top-0 z-10 bg-white px-6 py-4 border-b border-gray-200 flex items-center gap-3">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/e/e5/Lambang_Kabupaten_Donggala_%282015-sekarang%29.png" 
+         alt="Logo Pemda Donggala" class="w-8 h-8 object-contain">
+    <span class="text-lg font-semibold text-blue-700">ASET DIKBUD</span>
+  </div>
+
+  <!-- Menu Master Data -->
+  <div class="group border-b border-gray-200">
+    <a href="#" data-sheet="Master Data" class="px-6 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 block">Master Data</a>
+  </div>
+
+  <!-- Menu KIB Dropdown -->
+  <div class="group border-b border-gray-200">
+    <button id="kibBtn" class="w-full flex justify-between items-center px-6 py-3 hover:bg-blue-100 focus:outline-none">
+      <span class="font-medium text-gray-700">KIB</span>
+      <svg id="kibArrow" class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+    </button>
+    <div id="kibDropdown" class="hidden flex flex-col bg-gray-50 border-t border-gray-200">
+      <a href="inputdata.html" class="px-10 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 kib-link">Input KIB B</a>
+      <a href="rekap.html" class="px-10 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 kib-link">Rekap Data KIB B</a>
+    </div>
+  </div>
+
+  <!-- Menu Kecamatan Dropdown -->
+  <div class="group border-b border-gray-200">
+    <button id="kecamatanBtn" class="w-full flex justify-between items-center px-6 py-3 hover:bg-blue-100 focus:outline-none">
+      <span class="font-medium text-gray-700">Kecamatan</span>
+      <svg id="kecamatanArrow" class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+    </button>
+    <ul id="kecamatanDropdown" class="hidden flex-col border-t border-gray-200 bg-gray-50">
+      <li data-kecamatan="Banawa" class="px-10 py-2 hover:bg-blue-50 cursor-pointer">Kecamatan Banawa</li>
+      <li data-kecamatan="Banawa Tengah" class="px-10 py-2 hover:bg-blue-50 cursor-pointer">Kecamatan Banawa Tengah</li>
+      <li data-kecamatan="Banawa Selatan" class="px-10 py-2 hover:bg-blue-50 cursor-pointer">Kecamatan Banawa Selatan</li>
+      <!-- dst... -->
+    </ul>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<div class="flex-1 ml-64 p-6">
+
+  <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+    <div class="flex items-center gap-2">
+      <label for="kecamatanSelect" class="font-bold">Pilih Kecamatan:</label>
+      <select id="kecamatanSelect" class="px-3 py-1 border rounded">
+        <option value="">-- Semua Kecamatan --</option>
+      </select>
+    </div>
+
+    <input id="searchInput" type="text" placeholder="Cari data..."
+          class="px-3 py-1 border rounded focus:outline-none focus:ring focus:border-blue-300">
+
+    <div>
+      <button id="btnPdf" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 mr-2">Cetak PDF</button>
+      <button id="btnExcel" class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">Ekspor Excel</button>
+    </div>
+  </div>
+
+  <div id="output" class="p-4 bg-white border rounded shadow overflow-x-auto">
+    <p>Memuat data...</p>
+  </div>
+
+  <div id="pagination" class="flex gap-2 mt-4 justify-center"></div>
+
+</div>
+
+<script>
+// fungsi dropdown sidebar
+document.getElementById('kibBtn').addEventListener('click', () => {
+  document.getElementById('kibDropdown').classList.toggle('hidden');
+  document.getElementById('kibArrow').classList.toggle('rotate-90');
+});
+
+document.getElementById('kecamatanBtn').addEventListener('click', () => {
+  document.getElementById('kecamatanDropdown').classList.toggle('hidden');
+  document.getElementById('kecamatanArrow').classList.toggle('rotate-90');
+});
+
+// klik kecamatan di sidebar langsung filter
+document.querySelectorAll('#kecamatanDropdown li').forEach(item => {
+  item.addEventListener('click', () => {
+    document.getElementById('kecamatanSelect').value = item.dataset.kecamatan;
+    applyFilters();
+  });
+});
+
+const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRd8vIhHDUbmD6I2aXLX7-_Ysemt2aXA__wKNGoKN0XWWSWCScv5aSmx06H0xkl8g/pub?gid=1917777904&single=true&output=csv';
+let allData = [];
+let filteredData = [];
+let currentPage = 1;
+const rowsPerPage = 10;
+
+function renderTable(data, title = "Data Peralatan Mesin") {
+  const output = document.getElementById('output');
+
+  if (data.length === 0) {
+    output.innerHTML = `<p>Data kosong untuk pilihan ini.</p>`;
+    document.getElementById('pagination').innerHTML = "";
+    return;
+  }
+
+  const start = (currentPage - 1) * rowsPerPage;
+  const end = start + rowsPerPage;
+  const paginatedData = data.slice(start, end);
+
+  let table = `<h2 class="font-semibold mb-2">${title}</h2>`;
+  table += '<table id="dataTable" class="min-w-full border border-gray-300 text-sm"><thead class="bg-gray-200"><tr>';
+  Object.keys(data[0]).forEach(col => {
+    table += `<th class="border px-2 py-1 text-left">${col}</th>`;
+  });
+  table += '</tr></thead><tbody>';
+
+  paginatedData.forEach(row => {
+    table += '<tr>';
+    Object.values(row).forEach(val => {
+      table += `<td class="border px-2 py-1">${val || ''}</td>`;
+    });
+    table += '</tr>';
+  });
+
+  table += '</tbody></table>';
+  output.innerHTML = table;
+
+  renderPagination(data.length);
+}
+
+function renderPagination(totalRows) {
+  const totalPages = Math.ceil(totalRows / rowsPerPage);
+  let buttons = '';
+
+  if (totalPages <= 1) {
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  if (currentPage > 1) {
+    buttons += `<button onclick="changePage(${currentPage - 1})" class="px-3 py-1 border rounded bg-gray-200 hover:bg-gray-300">Prev</button>`;
+  }
+
+  for (let i = 1; i <= totalPages; i++) {
+    buttons += `<button onclick="changePage(${i})" class="px-3 py-1 border rounded ${i === currentPage ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}">${i}</button>`;
+  }
+
+  if (currentPage < totalPages) {
+    buttons += `<button onclick="changePage(${currentPage + 1})" class="px-3 py-1 border rounded bg-gray-200 hover:bg-gray-300">Next</button>`;
+  }
+
+  document.getElementById('pagination').innerHTML = buttons;
+}
+
+function changePage(page) {
+  currentPage = page;
+  applyFilters();
+}
+
+function loadKecamatanOptions(data) {
+  const kecamatanSet = new Set(data.map(row => row.Kecamatan).filter(Boolean));
+  const select = document.getElementById('kecamatanSelect');
+
+  kecamatanSet.forEach(kec => {
+    const opt = document.createElement('option');
+    opt.value = kec;
+    opt.textContent = kec;
+    select.appendChild(opt);
+  });
+}
+
+function applyFilters() {
+  const kecamatan = document.getElementById('kecamatanSelect').value;
+  const keyword = document.getElementById('searchInput').value.toLowerCase();
+
+  filteredData = allData.filter(row => {
+    const matchKecamatan = kecamatan ? row.Kecamatan === kecamatan : true;
+    const matchSearch = Object.values(row).some(val => val && val.toLowerCase().includes(keyword));
+    return matchKecamatan && matchSearch;
+  });
+
+  const title = kecamatan ? `Data Kecamatan ${kecamatan}` : "Data Semua Kecamatan";
+  renderTable(filteredData, title);
+}
+
+function fetchDataCSV(url){
+  Papa.parse(url, {
+    download: true,
+    header: true,
+    complete: function(results) {
+      allData = results.data.filter(row => row.Kecamatan);
+      loadKecamatanOptions(allData);
+      applyFilters();
+    },
+    error: function(err) {
+      document.getElementById('output').innerHTML = `<p class="text-red-500">Gagal memuat data: ${err}</p>`;
+    }
+  });
+}
+
+document.getElementById('kecamatanSelect').addEventListener('change', () => {currentPage = 1; applyFilters();});
+document.getElementById('searchInput').addEventListener('input', () => {currentPage = 1; applyFilters();});
+
+document.getElementById('btnPdf').addEventListener('click', () => {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const kecamatan = document.getElementById('kecamatanSelect').value;
+  doc.text(kecamatan ? `Data Kecamatan ${kecamatan}` : "Data Semua Kecamatan", 14, 10);
+  doc.autoTable({ html: '#dataTable', startY: 15 });
+  doc.save(kecamatan ? `Data_${kecamatan}.pdf` : 'Data_Semua_Kecamatan.pdf');
+});
+
+document.getElementById('btnExcel').addEventListener('click', () => {
+  const ws = XLSX.utils.json_to_sheet(filteredData);
+  const wb = XLSX.utils.book_new();
+  const kecamatan = document.getElementById('kecamatanSelect').value;
+  XLSX.utils.book_append_sheet(wb, ws, "Data");
+  XLSX.writeFile(wb, kecamatan ? `Data_${kecamatan}.xlsx` : 'Data_Semua_Kecamatan.xlsx');
+});
+
+fetchDataCSV(csvUrl);
+</script>
+
+</body>
+</html>
